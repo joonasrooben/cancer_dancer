@@ -21,7 +21,7 @@ We can roughly divide the project into four parts: data preprocessing and gather
 
 ## Data preprocessing and gathering
 
-Data was gathered from [National Cancer Institute GDC Data Portal](https://portal.gdc.cancer.gov/). For the latter task, we used the R code snippet provided by professor. Data was formed into dataframe and the genes with at least one zero expression, were filtered out. Also, only subjects with both normal and cancer tissue gene expression data available were kept for further analysis. From dataset of 611 subjects and ~60000 genes, only 144 subjects with 17759 genes were left.
+Data was gathered from [National Cancer Institute GDC Data Portal](https://portal.gdc.cancer.gov/). For the latter task, we used the R code snippet provided by professor. Data was formed into dataframe and the genes with at least one zero expression, were filtered out. Also, only subjects with both normal and cancer tissue gene expression data available were kept for further analysis. From dataset of 611 subjects and \~60000 genes, only 144 subjects with 17759 genes were left.
 
 Lastly, we shaped the dataset into form that it could be made into *DESeqDataSet* to use the data with *DESeq2* provided R tools.
 
@@ -62,7 +62,7 @@ The result as DESeqDataSet is in the right shape to be fed into *DESeq* function
 
 # Discovering differentially expressed genes
 
-
+After preprocessing, we applied the *DESeq* method on the data and find the differentially expressed genes. In simple words, we are going to find out if the cancer tissue genes are somehow differently expressed then normal tissue genes of the same subjects.
 
 ```{r}
 library("ggplot2")
@@ -72,14 +72,22 @@ dds <- DESeq(dds)
 res <- results(dds, alpha = 0.05)
 res
 hist(res$pvalue)
+```
 
+The result is a dataframe of genes and their corresponding expression characteristics depending on the condition. From the histogram we can see that we have to do some filtering to actually acertain the desired genes.
+
+For this we used log2 foldchange of 2.5 and adjusted pvalue of 0.05 as a threshold.
+
+```{r}
+
+#foldchange threshold
 FC = 2.5
 
-
+#prepering data for plotting
 plot_data = dplyr::mutate(as.data.frame(res), gene_id = rownames(res)) %>% 
   dplyr::as_tibble() 
 
-
+#filtering by log2foldchange and adjusted pvalue 
 filtered_genes = dplyr::mutate(as.data.frame(res), gene_id = rownames(res)) %>% 
   dplyr::as_tibble() %>% 
   dplyr::filter(!is.na(padj)) %>% #Remove NA p-values
@@ -90,8 +98,14 @@ filtered_genes = dplyr::mutate(as.data.frame(res), gene_id = rownames(res)) %>%
 
 filtered_genes
 
+```
+
+The result of filtering is that we have arrived to 499 differently expressed genes. Let's also plot the results as a volcano plot.
+
+```{r}
+
 cuts <- data.frame(Ref = c(paste0("FC < ",-FC),paste0("FC > ",FC), "pval < 0.05"),
-                   vals = c(-4*FC, FC, 0),
+                   vals = c(-3*FC, FC, 4),
                    yes = c(50,50,-log10(0.05)),
                    stringsAsFactors = FALSE)
 
@@ -106,21 +120,19 @@ ggplot(data=as.data.frame(res), aes(x=log2FoldChange, y=-log10(pvalue))) +
                           label = Ref,
                           hjust = -1,
                           vjust = -1),
-            data = cuts)+ ggtitle("Volcano plot of gene expression")
+            data = cuts)+ ggtitle("Volcano plot of differentially expressed genes")
+
+ggsave("volcano.png", width = 10, height = 5)
 ```
 
+![](volcano.png "Volcano plot of the differentially expressed genes")
 
 # Co-expression network analysis
 
-(for making the graph, I suggest ggraph (or at least I have used it and it provided beautiful output) and it should also provide the graph analysis tools)
+(for making the graph, I suggest ggraph (or at least I have used it and it provided beautiful output) and it should also provide the graph analysis tools. Also we can continue in the 3rd and 4th task with count data and just normalize them as stated in the slides of the 6th lecture.)
 
 ```{r}
 #Here are the significantly expressed genes
 expressed_genes = filtered_genes$gene_id 
 
 ```
-
-
-
-
-
