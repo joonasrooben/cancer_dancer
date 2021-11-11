@@ -1,0 +1,126 @@
+---
+title: "Differential Analyses of Gene Expression"
+author: "Pauline Baur, Iliyas Bektas, Joonas Järve"
+date: "11/11/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Abstract
+
+The aim of this project is to apply differential analysis on Kidney Renal Clear Cell Carcinoma (TCGA-KIRC) gene expression data from TCGA.
+
+# Introduction
+
+# Materials and methods
+
+We can roughly divide the project into four parts: data preprocessing and gathering, discovering differentially expressed genes(DEGs), co-expression network analysis and differential co-expressed network analysis.
+
+## Data preprocessing and gathering
+
+Data was gathered from [National Cancer Institute GDC Data Portal](https://portal.gdc.cancer.gov/). For the latter task, we used the R code snippet provided by professor. Data was formed into dataframe and the genes with at least one zero expression, were filtered out. Also, only subjects with both normal and cancer tissue gene expression data available were kept for further analysis. From dataset of 611 subjects and ~60000 genes, only 144 subjects with 17759 genes were left.
+
+Lastly, we shaped the dataset into form that it could be made into *DESeqDataSet* to use the data with *DESeq2* provided R tools.
+
+```{r}
+library("DESeq2")
+load("CountData.RData")
+
+#rename condition row to "condition"
+rownames(dataFull1) = c(rownames(dataFull1)[1:nrow(dataFull1)-1],"condition") 
+
+
+#add subjects' name a term of their tissue status
+colus = colnames(dataFull1)
+conds = dataFull1[nrow(dataFull1),]
+col_con = paste0(colus, paste0(".",conds)) 
+colnames(dataFull1) = col_con
+
+#make a vector of conditions and samples
+coldata <- t(dataFull1["condition",]) 
+
+#check if corresponding names are same to feed the data to DESeq
+all(rownames(coldata) == colnames(dataFull1)) 
+
+#make counts numeric
+numeric_data <- sapply(dataFull1[1:nrow(dataFull1)-1,], as.numeric)
+rownames(numeric_data) = rownames(dataFull1)[1:nrow(dataFull1)-1]
+
+#making data into DESeqDataSet 
+dds <- DESeqDataSetFromMatrix(countData = numeric_data, 
+                              colData = coldata,
+                              design = ~ condition)
+dds
+saveRDS(dds, file = "dds.rds")
+
+```
+
+The result as DESeqDataSet is in the right shape to be fed into *DESeq* function that will be used to determine the differentially expressed genes.
+
+# Discovering differentially expressed genes
+
+
+
+```{r}
+library("ggplot2")
+library("dplyr")
+
+dds <- DESeq(dds)
+res <- results(dds, alpha = 0.05)
+res
+hist(res$pvalue)
+
+FC = 2.5
+
+
+plot_data = dplyr::mutate(as.data.frame(res), gene_id = rownames(res)) %>% 
+  dplyr::as_tibble() 
+
+
+filtered_genes = dplyr::mutate(as.data.frame(res), gene_id = rownames(res)) %>% 
+  dplyr::as_tibble() %>% 
+  dplyr::filter(!is.na(padj)) %>% #Remove NA p-values
+  dplyr::filter(padj < 0.01) %>% #Filter according to FDR
+  #dplyr::filter(log2FoldChange>0) %>% # use if u want to have only up or down regulated genes
+  dplyr::filter(abs(log2FoldChange) > FC) %>% #Filter according to fold-change
+  dplyr::arrange(-log2FoldChange) #Sort by fold change
+
+filtered_genes
+
+cuts <- data.frame(Ref = c(paste0("FC < ",-FC),paste0("FC > ",FC), "pval < 0.05"),
+                   vals = c(-4*FC, FC, 0),
+                   yes = c(50,50,-log10(0.05)),
+                   stringsAsFactors = FALSE)
+
+
+ggplot(data=as.data.frame(res), aes(x=log2FoldChange, y=-log10(pvalue))) + 
+    geom_point() +
+        geom_hline(yintercept=-log10(0.05), col="red") + geom_vline(xintercept=c(-FC, FC), col="red") +
+  geom_point(aes(color = "Up-regulated"), data = ~ .x %>% filter(log2FoldChange > FC ))+
+  geom_point(aes(color = "Down-regulated"), data = ~ .x %>% filter(log2FoldChange < -FC ))+
+  geom_text(mapping = aes(x = vals,
+                          y = yes,
+                          label = Ref,
+                          hjust = -1,
+                          vjust = -1),
+            data = cuts)+ ggtitle("Volcano plot of gene expression")
+```
+
+
+# Co-expression network analysis
+
+(for making the graph, I suggest ggraph (or at least I have used it and it provided beautiful output) and it should also provide the graph analysis tools)
+
+```{r}
+#Here are the significantly expressed genes
+expressed_genes = filtered_genes$gene_id 
+
+```
+
+
+
+
+
