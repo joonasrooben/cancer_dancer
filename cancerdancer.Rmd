@@ -136,3 +136,185 @@ ggsave("volcano.png", width = 10, height = 5)
 expressed_genes = filtered_genes$gene_id 
 
 ```
+
+```{r}
+load("NumericFPKM.RData")
+
+## loaded numeric_dataFPKM it has an equivalent form to the numeric_data
+## data frame, but is based on FPKM data instead of count data
+
+#Here are the significantly expressed genes
+expressed_genes = filtered_genes$gene_id 
+
+#Only keep the rows of numeric_dataFPKM that contain DEGs
+DEG_FPKM <- numeric_dataFPKM[expressed_genes,]
+
+#579 rows remain
+
+#Split the data frame into two parts (cancer and normal)
+#in the following, apply the same calculations to both parts
+
+DEG_FPKM_split <- list(normal = DEG_FPKM[, 1:(ncol(DEG_FPKM)/2)],
+     cancer = DEG_FPKM[, (ncol(DEG_FPKM)/2 + 1):ncol(DEG_FPKM)])
+
+
+
+## apply transformation log2(x + 1) to both data frames
+## see last slide of "6. Differential Co Expression Analysis of Gene Expression"
+## slide set
+
+DEG_FPKM_split <- lapply(DEG_FPKM_split, function(dat)log2(dat + 1))
+
+## Calculate correlation matrix
+DEG_FPKM_split <- lapply(DEG_FPKM_split, function(dat)WGCNA::cor(t(dat)))
+
+## Use Pearson's correlation
+
+
+### Use absolute correlation
+### DEG_FPKM_split <- lapply(DEG_FPKM_split, abs)
+
+
+## For now: choose tau = 0.85
+## I also tried tau = 0.7, but found the resulting networks way to dense to
+## see anything
+
+## Should we make a parameter selection segment in the appendix of the reoprt
+tau <- 0.85
+
+
+## Set negative correlations to zero (don't do this, if we have absolute correlations)
+DEG_FPKM_split$normal[DEG_FPKM_split$normal < 0] <- 0
+DEG_FPKM_split$cancer[DEG_FPKM_split$normal < 0] <- 0
+
+
+## apply signum function to get binary adjacency matrix
+DEG_FPKM_split2 <- lapply(DEG_FPKM_split, signumAdjacencyFunction, threshol= tau)
+
+
+## calculate connectivity (for each nodes, i.e. the total number of connections 
+## this node has)
+connect <- lapply(DEG_FPKM_split2, rowSums)
+
+## Make a histogram of the conenct vector, to check if the network is
+## approximately scale free
+
+## histogram for normal tissue
+dat_norm <- data.frame(connect$normal)
+ggplot(data = dat_norm, aes(connect.normal)) +
+  geom_histogram( aes(x = connect.normal, y = ..density..), fill="#69b3a2" ) +
+  ggtitle("Degree distribution in normal tissue") +
+  xlab("degree") 
+
+## histogram for cancer tissue
+dat_can <- data.frame(connect$cancer)
+ggplot(data = dat_can, aes(connect.cancer)) + 
+  geom_histogram( aes(x = connect.cancer, y = ..density..), fill="#69b3a2" ) +
+  ggtitle("Degree distribution in cancer tissue") +
+  xlab("degree") 
+
+
+## Both networks have a really high number of nodes without connections to any
+## other nodes. This does not really mean that the model is scale free
+
+## the cancer model has more closely connected nodes
+
+## compute degree index
+
+## calculate N
+N <- ncol(DEG_FPKM_split2$normal)
+
+## Calculate Average Degree
+lapply(connect, function(x)sum(x)/N)
+
+## Cancer genes are way more connected
+
+## Identify the hub genes
+
+## list of hub genes - normal condition
+
+
+
+## calculate the 0.95 quantile of the empirical distribution of degrees over 
+## nodes to get the hub genes
+
+## Get the names of hub genes from both datasets
+
+hub_name <- sapply(connect, function(con){
+  
+  #95% quantile of the degrees
+  qu <- quantile(con, 0.95)
+  
+  #keep all observations greater than the quantile as hubs
+  #extract according gene names
+  names(con)[con > qu]
+})
+
+
+## merge to vector and remove doubled entries
+hub_name <- unique(as.character(unlist(hub_name)))
+
+
+## extract degrees of these genes
+
+## turn list containing the degrees into a data frame
+connect_matrix <- do.call(cbind, connect)
+
+## extract the genes with a high degree value (over 0.95 quantile)
+connect_hub <- data.frame(connect_matrix[hub_name,])
+
+
+## reorder by cancer degree level (looks better in the plot below)
+ord <- order(connect_hub$cancer)
+connect_hub <- connect_hub[ord,]
+
+## add column with gene names
+connect_hub$gene <- factor(rownames(connect_hub), levels = rownames(connect_hub))
+
+
+## give this data to the lollipop plot
+## Plot
+ggplot(connect_hub) +
+  geom_segment( aes(x=gene, xend=gene, y=normal, yend=cancer), color="grey") +
+  geom_point( aes(x=gene, y=normal), color=rgb(0.2,0.7,0.1,0.5), size=1 ) +
+  geom_point( aes(x=gene, y=cancer), color=rgb(0.7,0.2,0.1,0.5), size=1 ) +
+  coord_flip()+
+  #theme_ipsum(axis_text_size = 3) +
+  
+  theme(legend.position = "none",
+    axis.text.x = element_text(size =10),
+    axis.text.y = element_text(size = 7)
+  ) +
+  xlab("") +
+  ylab("Degree of Gene") +
+  ggtitle("Degree in cancer (red) vs. normal (green) tissue") 
+
+
+## Make network graph
+
+library(igraph)
+library(ggraph)
+
+## All connections of one hub gene
+hub_con <- dat["ENSG00000138964",] == 1
+
+## Matrix showing all the gene's connections
+hub2 <- dat[hub_con, hub_con]
+
+## Put this into the rigth format for ggraph
+net <- graph_from_adjacency_matrix(hub2 , mode='undirected', diag=F )
+
+V(net)$degree <- degree(net)
+
+ggraph(net, layout = 'igraph', algorithm = "fr") + 
+  geom_edge_link0(edge_width = 1, edge_alpha = 0.7) +  
+  geom_node_point(aes(size = degree), colour = 'forestgreen') + 
+  geom_node_text(aes(label = name, filter = degree > 50), color = 'white', 
+                 size = 3) + 
+  ggforce::theme_no_axes()
+  
+  
+```
+
+Here is a website I found, where they describe how to convert the Gene_IDs we have into the gene's names. Maybe this is helpful for the last part of the task:
+https://stackoverflow.com/questions/28543517/how-can-i-convert-ensembl-id-to-gene-symbol-in-r
