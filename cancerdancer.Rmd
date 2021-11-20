@@ -139,6 +139,7 @@ expressed_genes = filtered_genes$gene_id
 
 ```{r}
 load("NumericFPKM.RData")
+library(WGCNA)
 
 ## loaded numeric_dataFPKM it has an equivalent form to the numeric_data
 ## data frame, but is based on FPKM data instead of count data
@@ -294,6 +295,9 @@ ggplot(connect_hub) +
 
 library(igraph)
 library(ggraph)
+
+## choose either the normal or cancer tissue here (for vizualization)
+dat <- DEG_FPKM_split2$cancer
 
 ## All connections of one hub gene
 hub_con <- dat["ENSG00000138964",] == 1
