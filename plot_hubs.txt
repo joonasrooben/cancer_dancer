@@ -1,0 +1,78 @@
+library(igraph)
+library(ggraph)
+library(tidygraph)
+library(patchwork)
+
+#lets fix a hub
+hu = hub_name[21]
+##DEG_FPKM_split
+## choose either the normal or cancer tissue here (for vizualization)
+dat <- DEG_FPKM_split$cancer
+dat_abs <- DEG_FPKM_split2$cancer
+## All connections of one hub gene
+hub_con <- abs(dat[hu,]) > tau & abs(dat[hu,]) != 1 ##somehow there is none negative weighted edges
+hub_con_abs <- dat_abs[hu,] == 1
+
+###should add also the prime node?????
+
+## Matrix showing all the gene's connections
+hub2 <- dat[hub_con, hub_con]
+hub2_abs <- dat_abs[hub_con_abs, hub_con_abs]
+
+
+## Put this into the rigth format for ggraph
+net1 <- graph_from_adjacency_matrix(hub2_abs , mode='undirected', diag=F )
+net1_buf <- graph_from_adjacency_matrix(hub2 , mode='undirected', diag=F, weighted=TRUE )
+set.seed(1)
+V(net1)$degree <- degree(net1)
+E(net1)$weight <- E(net1_buf)$weight
+
+##make a layout for the first graph
+layg1 <- layout.fruchterman.reingold(net1)
+  
+dat <- DEG_FPKM_split$normal
+dat_abs <- DEG_FPKM_split2$normal
+
+## All connections of one hub gene
+hub_con <- abs(dat[hu,]) > tau & abs(dat[hu,]) != 1
+hub_con_abs <- dat_abs[hu,] == 1
+## Matrix showing all the gene's connections
+hub2 <- dat[hub_con, hub_con]
+hub2_abs <- dat_abs[hub_con_abs, hub_con_abs]
+## Put this into the rigth format for ggraph
+net2 <- graph_from_adjacency_matrix(hub2_abs , mode='undirected', diag=F )
+net2_buf <- graph_from_adjacency_matrix(hub2 , mode='undirected', diag=F, weighted=TRUE )
+
+V(net2)$degree <- degree(net2)
+E(net2)$weight <- E(net2_buf)$weight
+layg2 <- layout.fruchterman.reingold(net2)
+# overwrite coords for shared nodes
+layg2[which(V(net2)$name %in% V(net1)$name), ] <- 
+                                      layg1[which(V(net1)$name %in% V(net2)$name),]
+
+## to fix the positions also in the matter of scale
+xlim <- range(c(layg1[,1], layg2[,1]))
+ylim <- range(c(layg1[,2], layg2[,2]))
+
+p1 <- ggraph(net1, layout = layg1) + 
+  geom_edge_link0(aes(colour = weight > 0),edge_width = 0.5, edge_alpha = 0.7) +  
+  geom_node_point(aes(size = degree), colour = "lightblue") + 
+  geom_node_text(aes(label = name, filter = degree > 20), color = 'yellow', 
+                 size = 3) + xlim(xlim) + ylim(ylim) + 
+  ggforce::theme_no_axes() + ggtitle(paste("Hub* of cancer tissue gene ",hu))
+
+p2 <- ggraph(net2, layout = layg2) + 
+  geom_edge_link0(aes(colour = weight > 0),edge_width = 0.5, edge_alpha = 0.7) +  
+  geom_node_point(aes(size = degree), colour = "lightgreen") + 
+  geom_node_text(aes(label = name, filter = degree > 20 ), color = 'purple', 
+                 size = 3) + xlim(xlim) + ylim(ylim) + 
+  ggforce::theme_no_axes() + ggtitle(paste("Hub* of normal tissue gene ",hu))
+
+
+common_scale <- scale_size_area(limits = c(0, 50))
+
+p1 <- p1 + common_scale
+p2 <- p2 + common_scale
+
+
+(p1 | p2) + plot_layout(guides = "collect")
