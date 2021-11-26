@@ -138,12 +138,13 @@ expressed_genes = filtered_genes$gene_id
 ```
 
 ```{r}
-load("NumericFPKM.RData")
+
 library(WGCNA)
+load("NumericFPKM.RData")
+#load("filteredGenes.RData")
 
 ## loaded numeric_dataFPKM it has an equivalent form to the numeric_data
 ## data frame, but is based on FPKM data instead of count data
-
 #Here are the significantly expressed genes
 expressed_genes = filtered_genes$gene_id 
 
@@ -154,93 +155,181 @@ DEG_FPKM <- numeric_dataFPKM[expressed_genes,]
 
 #Split the data frame into two parts (cancer and normal)
 #in the following, apply the same calculations to both parts
-
-DEG_FPKM_split <- list(normal = DEG_FPKM[, 1:(ncol(DEG_FPKM)/2)],
-     cancer = DEG_FPKM[, (ncol(DEG_FPKM)/2 + 1):ncol(DEG_FPKM)])
-
-
-
+DEG_FPKM_split <- list(cancer = DEG_FPKM[, 1:(ncol(DEG_FPKM)/2)],
+                       normal = DEG_FPKM[, (ncol(DEG_FPKM)/2 + 1):ncol(DEG_FPKM)])
 ## apply transformation log2(x + 1) to both data frames
 ## see last slide of "6. Differential Co Expression Analysis of Gene Expression"
 ## slide set
-
 DEG_FPKM_split <- lapply(DEG_FPKM_split, function(dat)log2(dat + 1))
-
 ## Calculate correlation matrix
 DEG_FPKM_split <- lapply(DEG_FPKM_split, function(dat)WGCNA::cor(t(dat)))
-
 ## Use Pearson's correlation
-
-
 ### Use absolute correlation
 ### DEG_FPKM_split <- lapply(DEG_FPKM_split, abs)
+
+
+
+####################### SELECTION OF TAU #######################################
+
+
+## calculate N
+N <- ncol(DEG_FPKM_split$normal)
+
+
+
+tau_seq <- seq(0.5,0.95, length.out = 10)
+
+Connect_by_tau <- lapply(tau_seq, function(tau){
+  DEG_FPKM_split2 <- lapply(DEG_FPKM_split, signumAdjacencyFunction, threshol= tau)
+  ## calculate connectivity (for each nodes, i.e. the total number of connections 
+  ## this node has)
+  connect <- lapply(DEG_FPKM_split2, rowSums)
+  
+  
+})
+
+#Add the value of tau as a names to the list
+names(Connect_by_tau) <- as.character(tau_seq)
+
+#Calculate different degree indices
+
+deg_index <- sapply(Connect_by_tau, function(con){
+  sapply(con, function(x)sum(x)/N)
+})
+
+## print a table
+
+library(xtable)
+print(xtable(deg_index, 
+             caption = "Degree index for various thresholds $\\tau$ by tissue sample"),
+      caption.placement = "top")
+
+df1 <- data.frame(x = tau_seq, y = deg_index[1,])
+df2 <- data.frame(x = tau_seq, y = deg_index[2,])
+
+
+ggplot(df1,aes(x,y))+geom_line(aes(color="normal tissue"))+
+  geom_line(data=df2,aes(color="cancer tissue"))+
+  geom_point(data=df2,aes(color="cancer tissue"))+
+  geom_point(aes(color="normal tissue"))+
+  labs(color="Legend text") +
+  ggtitle(expression(paste("Degree index for various thresholds ", tau ," by tissue sample"))) +
+  ylab("Degree index") +
+  xlab(expression(tau)) +
+  theme(legend.title = element_blank())
+
+
+#empty list to save the plots in
+
+plots_tau <-  vector(mode = "list", length = length(tau_seq) * 2)
+
+for(i in 1:length(tau_seq)){
+  con1 <- Connect_by_tau[[i]]
+  
+  ## Make a histogram of the conenct vector, to check if the network is
+  ## approximately scale free
+  ## histogram for normal tissue
+  dat_norm <- data.frame(con1$normal)
+  p_norm <- ggplot(data = dat_norm, aes(con1.normal)) +
+    geom_histogram( aes(x = con1.normal, y = ..density..), fill="#69b3a2" ) +
+    ggtitle(parse(text = paste0('"Degree distribution in normal tissue for "', ' ~ tau == ',tau_seq[i])))+
+    xlab("degree") #+
+  
+  
+  ## histogram for cancer tissue
+  dat_can <- data.frame(con1$cancer)
+  p_canc <- ggplot(data = dat_can, aes(con1.cancer)) + 
+    geom_histogram( aes(x = con1.cancer, y = ..density..), fill="#69b3a2" ) +
+    ggtitle(parse(text = paste0('"Degree distribution in cancer tissue for "', ' ~ tau == ',tau_seq[i])))+
+    xlab("degree") 
+  
+  
+  #return(list(p_norm, p_canc))
+  #plots_tau[[paste(tau_seq[i])]] <- list(p_norm, p_canc)
+  plots_tau[[2 * i -1]] <- p_norm
+  plots_tau[[2 * i]] <- p_canc
+}
+
+library(gridExtra)
+
+M <-  c(seq(1, 19, length.out = 10),seq(2, 20, length.out = 10))
+plots_tau <- plots_tau[M]
+ggsave(
+  filename = "plots10.pdf", 
+  #grid.arrange(grobs = plots_tau, ncol = 2, as.table = TRUE),
+  plot = marrangeGrob(plots_tau, nrow=5, ncol= 2), 
+  width = 9, height = 15
+)
+
+dev.off()##### Multiple Plots on one page
+
+
+
+
+############################### APPLICATION WITH ACTUAL TAU ####################
 
 
 ## For now: choose tau = 0.85
 ## I also tried tau = 0.7, but found the resulting networks way to dense to
 ## see anything
-
 ## Should we make a parameter selection segment in the appendix of the reoprt
 tau <- 0.85
 
 
-## Set negative correlations to zero (don't do this, if we have absolute correlations)
-DEG_FPKM_split$normal[DEG_FPKM_split$normal < 0] <- 0
-DEG_FPKM_split$cancer[DEG_FPKM_split$normal < 0] <- 0
+########### For now: do not set negative correlations to zero
+##########DEG_FPKM_split$normal[DEG_FPKM_split$normal < 0] <- 0
+##########DEG_FPKM_split$cancer[DEG_FPKM_split$normal < 0] <- 0
 
 
 ## apply signum function to get binary adjacency matrix
-DEG_FPKM_split2 <- lapply(DEG_FPKM_split, signumAdjacencyFunction, threshol= tau)
+## use absolute values of the correlations 
+DEG_FPKM_split2 <- lapply(DEG_FPKM_split, function(x)signumAdjacencyFunction(abs(x), threshold= tau))
+
+##Create an additional matrix for each dataset indicating if the correlation
+##is positive (coded by 1), negative (coded by -1) or 0
+
+DEG_FPKM_split_sign <- lapply(DEG_FPKM_split, function(ma){
+  ma[ma < 0] <- -1
+  ma[ma > 0] <- 1
+  #set diagonal of the matrix to zero
+  diag(ma) <- 0
+  return(ma)
+})
+
+
 
 
 ## calculate connectivity (for each nodes, i.e. the total number of connections 
 ## this node has)
 connect <- lapply(DEG_FPKM_split2, rowSums)
-
 ## Make a histogram of the conenct vector, to check if the network is
 ## approximately scale free
-
 ## histogram for normal tissue
 dat_norm <- data.frame(connect$normal)
 ggplot(data = dat_norm, aes(connect.normal)) +
   geom_histogram( aes(x = connect.normal, y = ..density..), fill="#69b3a2" ) +
   ggtitle("Degree distribution in normal tissue") +
   xlab("degree") 
-
 ## histogram for cancer tissue
 dat_can <- data.frame(connect$cancer)
 ggplot(data = dat_can, aes(connect.cancer)) + 
   geom_histogram( aes(x = connect.cancer, y = ..density..), fill="#69b3a2" ) +
   ggtitle("Degree distribution in cancer tissue") +
   xlab("degree") 
-
-
 ## Both networks have a really high number of nodes without connections to any
 ## other nodes. This does not really mean that the model is scale free
-
 ## the cancer model has more closely connected nodes
-
 ## compute degree index
-
 ## calculate N
 N <- ncol(DEG_FPKM_split2$normal)
-
 ## Calculate Average Degree
 lapply(connect, function(x)sum(x)/N)
-
-## Cancer genes are way more connected
-
+## normal genes are way more connected
 ## Identify the hub genes
-
 ## list of hub genes - normal condition
-
-
-
 ## calculate the 0.95 quantile of the empirical distribution of degrees over 
 ## nodes to get the hub genes
-
 ## Get the names of hub genes from both datasets
-
 hub_name <- sapply(connect, function(con){
   
   #95% quantile of the degrees
@@ -250,29 +339,18 @@ hub_name <- sapply(connect, function(con){
   #extract according gene names
   names(con)[con > qu]
 })
-
-
 ## merge to vector and remove doubled entries
 hub_name <- unique(as.character(unlist(hub_name)))
-
-
 ## extract degrees of these genes
-
 ## turn list containing the degrees into a data frame
 connect_matrix <- do.call(cbind, connect)
-
 ## extract the genes with a high degree value (over 0.95 quantile)
 connect_hub <- data.frame(connect_matrix[hub_name,])
-
-
-## reorder by cancer degree level (looks better in the plot below)
-ord <- order(connect_hub$cancer)
+## reorder by normal degree level (looks better in the plot below)
+ord <- order(connect_hub$normal)
 connect_hub <- connect_hub[ord,]
-
 ## add column with gene names
 connect_hub$gene <- factor(rownames(connect_hub), levels = rownames(connect_hub))
-
-
 ## give this data to the lollipop plot
 ## Plot
 ggplot(connect_hub) +
@@ -283,39 +361,224 @@ ggplot(connect_hub) +
   #theme_ipsum(axis_text_size = 3) +
   
   theme(legend.position = "none",
-    axis.text.x = element_text(size =10),
-    axis.text.y = element_text(size = 7)
+        axis.text.x = element_text(size =10),
+        axis.text.y = element_text(size = 7)
   ) +
   xlab("") +
   ylab("Degree of Gene") +
   ggtitle("Degree in cancer (red) vs. normal (green) tissue") 
 
 
-## Make network graph
+
+
+######### PLOT CODE BY JOONAS ##################################################
 
 library(igraph)
 library(ggraph)
+library(tidygraph)
+library(patchwork)
 
-## choose either the normal or cancer tissue here (for vizualization)
-dat <- DEG_FPKM_split2$cancer
+#lets fix a hub
+hu <- "ENSG00000005844"
+#hu = hub_name[17]
 
+
+##DEG_FPKM_split
+## Prepare the normal and the cancer dataset for visulaization
+
+#cancer data set
+dat_c <- DEG_FPKM_split$cancer  #correlation
+dat_abs_c <- DEG_FPKM_split2$cancer #matrix with 0 and 1
 ## All connections of one hub gene
-hub_con <- dat["ENSG00000138964",] == 1
+
+#find out which genes the gub gene is connected to
+hub_con_c <- abs(dat_c[hu,]) > tau & abs(dat_c[hu,]) != 1 ##somehow there is none negative weighted edges
+hub_con_abs_c <- dat_abs_c[hu,] == 1
+
+
+###should add also the prime node?????
 
 ## Matrix showing all the gene's connections
-hub2 <- dat[hub_con, hub_con]
+hub2_c <- dat_c[hub_con_c, hub_con_c] #correlations
+hub2_abs_c <- dat_abs_c[hub_con_abs_c, hub_con_abs_c] #1 and one
+## Do the same with the matrix indicating the signs
+dat_sign_c <- DEG_FPKM_split_sign$cancer
+hub2_sign_c <- dat_sign_c[hub_con_abs_c, hub_con_abs_c]
+
+#set the ones to zero, where no linge should be drawn in the graph
+hub2_sign_c[hub2_abs_c == 0] <- 0
+
 
 ## Put this into the rigth format for ggraph
-net <- graph_from_adjacency_matrix(hub2 , mode='undirected', diag=F )
+net1 <- graph_from_adjacency_matrix(hub2_abs_c , mode='undirected', diag=F )
+net1_buf <- graph_from_adjacency_matrix(hub2_c , mode='undirected', diag=F, weighted=TRUE )
+set.seed(1)
+V(net1)$degree <- degree(net1)
+E(net1)$weight <- E(net1_buf)$weight
 
-V(net)$degree <- degree(net)
+##make a layout for the first graph
+set.seed(1)
+layg1 <- layout.fruchterman.reingold(net1)
 
-ggraph(net, layout = 'igraph', algorithm = "fr") + 
-  geom_edge_link0(edge_width = 1, edge_alpha = 0.7) +  
-  geom_node_point(aes(size = degree), colour = 'forestgreen') + 
-  geom_node_text(aes(label = name, filter = degree > 50), color = 'white', 
-                 size = 3) + 
-  ggforce::theme_no_axes()
+
+
+
+#prepare normal data the same way we prepared cancer data
+dat_n <- DEG_FPKM_split$normal
+dat_abs_n <- DEG_FPKM_split2$normal
+
+## All connections of one hub gene
+hub_con_n <- abs(dat_n[hu,]) > tau & abs(dat_n[hu,]) != 1
+hub_con_abs_n <- dat_abs_n[hu,] == 1
+
+
+## Matrix showing all the gene's connections
+hub2_n <- dat_n[hub_con_n, hub_con_n]
+hub2_abs_n <- dat_abs_n[hub_con_abs_n, hub_con_abs_n]
+
+## Do the same with the matrix indicating the signs
+dat_sign_n <- DEG_FPKM_split_sign$normal
+hub2_sign_n <- dat_sign_n[hub_con_abs_n, hub_con_abs_n]
+
+#set the ones to zero, where no linge should be drawn in the graph
+hub2_sign_n[hub2_abs_n == 0] <- 0
+
+
+
+## Put this into the rigth format for ggraph
+net2 <- graph_from_adjacency_matrix(hub2_abs_n , mode='undirected', diag=F )
+net2_buf <- graph_from_adjacency_matrix(hub2_n , mode='undirected', diag=F, weighted=TRUE )
+
+V(net2)$degree <- degree(net2)
+E(net2)$weight <- E(net2_buf)$weight
+set.seed(1)
+layg2 <- layout.fruchterman.reingold(net2)
+
+# overwrite coords for shared nodes
+layg2[which(V(net2)$name %in% V(net1)$name), ] <- 
+  layg1[which(V(net1)$name %in% V(net2)$name),]
+
+## to fix the positions also in the matter of scale
+xlim <- range(c(layg1[,1], layg2[,1]))
+ylim <- range(c(layg1[,2], layg2[,2]))
+
+
+
+## We will create one data frame for each set of correlations that indicates
+## which nodes have a negative correlation
+
+## cancer
+neg <- which(hub2_sign_c == -1, arr.ind = TRUE)
+if(nrow(neg) != 0){
+  ## go through neg and sort such that the smaller number
+  ## is always in the first row
+  neg <- t(apply(neg, 1, sort))
+  
+  ##remove doubled entreis
+  neg <- unique(neg)
+  
+  
+  ## Make a dataframe that contains coordinates from layg1 (for cancer)
+  n <- nrow(neg)
+  neg_links_c <- data.frame(x = numeric(n), y = numeric(n),
+                            xend = numeric(n), yend = numeric(n))
+  
+  
+  ##fill up first two columns
+  
+  for(i in 1:n){
+    
+    #first two columns
+    neg_links_c[i, 1:2] <- layg1[neg[i, 1],]
+    
+    #last two columns
+    neg_links_c[i, 3:4] <- layg1[neg[i, 2],]
+  }
+  
+}else{neg_links_c <- NULL}
+
+
+## same for normal tissue
+neg <- which(hub2_sign_n == -1, arr.ind = TRUE)
+if(nrow(neg)){
+  ## go through neg and sort such that the smaller number
+  ## is always in the first row
+  neg <- t(apply(neg, 1, sort))
+  
+  ##remove doubled entreis
+  neg <- unique(neg)
+  
+  
+  ## Make a dataframe that contains coordinates from layg1 (for cancer)
+  n <- nrow(neg)
+  neg_links_n <- data.frame(x = numeric(n), y = numeric(n),
+                            xend = numeric(n), yend = numeric(n))
+  
+  
+  ##fill up first two columns
+  
+  for(i in 1:n){
+    
+    #first two columns
+    neg_links_n[i, 1:2] <- layg2[neg[i, 1],]
+    
+    #last two columns
+    neg_links_n[i, 3:4] <- layg2[neg[i, 2],]
+  }
+  
+}else{neg_links_n <- NULL}
+
+
+
+
+#cancer
+
+p1 <- ggraph(net1, layout = layg1) + 
+  geom_edge_link0(edge_width = 0.5, edge_alpha = 0.7, color = "cadetblue4") + 
+  xlim(xlim) + ylim(ylim) + 
+  ggtitle(paste("Hub* of cancer tissue gene ",hu))
+
+#add lines for negative correlations
+if(!is.null(nrow(neg_links_c))){
+  p1 <-  p1 +   geom_segment(aes(x = x, y = y, xend =xend, yend = yend), 
+                             data = neg_links_c, col = "indianred3")
+}
+p1 <- p1  + 
+  geom_node_point(aes(size = degree), colour = "lightgreen") +
+  geom_node_text(aes(label = name, filter = degree > 30), color = 'black', 
+                 size = 3) 
+
+
+
+#normal
+
+p2 <- ggraph(net2, layout = layg2) + 
+  geom_edge_link0(edge_width = 0.5, edge_alpha = 0.7, color = "cadetblue4") + 
+  xlim(xlim) + ylim(ylim) + 
+  ggtitle(paste("Hub* of normal tissue gene ",hu))
+
+#add lines for negative correlations
+if(!is.null(nrow(neg_links_n))){
+  p2 <-  p2 +     geom_segment(aes(x = x, y = y, xend =xend, yend = yend), 
+                               data = neg_links_n, col = "indianred3")
+}
+
+ p2 <- p2 +  geom_node_point(aes(size = degree), colour = "lightgreen") +
+  geom_node_text(aes(label = name, filter = degree > 30), color = 'black', 
+                 size = 3) 
+
+
+
+
+common_scale <- scale_size_area(limits = c(0, 50))
+
+p1 <- p1 + common_scale
+p2 <- p2 + common_scale
+
+
+(p1 | p2) + plot_layout(guides = "collect")
+
+
   
   
 ```
