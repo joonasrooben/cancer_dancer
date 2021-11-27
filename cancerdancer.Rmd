@@ -585,3 +585,193 @@ p2 <- p2 + common_scale
 
 Here is a website I found, where they describe how to convert the Gene_IDs we have into the gene's names. Maybe this is helpful for the last part of the task:
 https://stackoverflow.com/questions/28543517/how-can-i-convert-ensembl-id-to-gene-symbol-in-r
+
+
+# Part 4. Differential Co-expressed Network
+
+```{r}
+# These codes in the beginnig and other codes I take mostly from the part 3
+load("NumericFPKM.RData")
+library(WGCNA)
+
+## loaded numeric_dataFPKM it has an equivalent form to the numeric_data
+## data frame, but is based on FPKM data instead of count data
+
+#Here are the significantly expressed genes
+expressed_genes = filtered_genes$gene_id 
+
+#Only keep the rows of numeric_dataFPKM that contain DEGs
+DEG_FPKM <- numeric_dataFPKM[expressed_genes,]
+
+#579 rows remain
+
+#Split the data frame into two parts (cancer and normal)
+#in the following, apply the same calculations to both parts
+
+
+DEG_FPKM_split <- list(cancer = DEG_FPKM[, 1:(ncol(DEG_FPKM)/2)],
+                       normal = DEG_FPKM[, (ncol(DEG_FPKM)/2 + 1):ncol(DEG_FPKM)])
+
+
+
+
+## apply transformation log2(x + 1) to both data frames
+## see last slide of "6. Differential Co Expression Analysis of Gene Expression"
+## slide set
+
+DEG_FPKM_split <- lapply(DEG_FPKM_split, function(dat)log2(dat + 1))
+
+## Calculate correlation matrix
+DEG_FPKM_split <- lapply(DEG_FPKM_split, function(dat)WGCNA::cor(t(dat)))
+
+```
+
+
+```{r}
+## Make diagonals equal to zero because due to the particularity
+## of thefisher transformation it is becoming inf
+diag(DEG_FPKM_split$normal) = 0
+diag(DEG_FPKM_split$cancer) = 0
+
+# The fisher transformation. Calculation of differential correlations.
+DEG_FPKM_split_z <- lapply(DEG_FPKM_split, function(dat)(1/2)*log((1+dat)/(1-dat)) )
+#To stabilize the variance of sample correlation coefficients in each condition
+#(condition 1 and condition 2), application of the Fisher z-transformation:
+
+```
+
+```{r}
+# Compute z-scores to evaluate the correlation
+z_scores <- function(m1, m2){
+   nom <- m1 - m2
+   denom <- sqrt(2/(72-3))
+   res <- nom/denom
+   return(res)
+}
+```
+
+```{r}
+# Matrix with z-scores:z_m
+z_m <- z_scores(DEG_FPKM_split_z$normal, DEG_FPKM_split_z$cancer)
+```
+
+
+```{r}
+## apply signum function to get binary adjacency matrix
+## firstly we the absolute of the matrix to set the threshold more conveniently
+z_m = abs(z_m)
+z_m[z_m < 3] <- 0
+z_m[z_m > 3] <- 1
+```
+
+```{r}
+## calculate connectivity of z scores
+connect_z <- rowSums(z_m)
+```
+
+
+```{r}
+## To check if the network is scale free, make a histogram of the connect vector
+## histogram for z_scores
+library('ggplot2')
+library(ggplot2)
+dat_norm <- data.frame(connect_z)
+ggplot(data = dat_norm, aes(connect_z)) +
+  geom_histogram( aes(x = connect_z, y = ..density..), fill="#69b3a2" ) +
+  ggtitle("Degree distribution in z_scores") +
+  xlab("degree") 
+## looks like degree distribution follows normal distribution
+```
+
+```{r}
+
+
+## Calculate Average Degree
+sum(connect_z)/ ncol(z_m)
+```
+
+
+```{r}
+## calculate the 0.95 quantile of the empirical distribution of degrees over 
+## nodes to get the hub genes
+
+## Get the names of hub genes from both datasets
+
+hub_name_z <- names(connect_z)[connect_z > quantile(connect_z, 0.95)]
+```
+
+```{r}
+## merge to vector and remove doubled entriess
+hub_name_z <- unique(as.character(unlist(hub_name_z)))
+```
+
+```{r}
+## extract degrees of these genes
+
+## turn list containing the degrees into a data frame
+connect_matrix_z <- cbind(connect_z)
+
+## extract the genes with a high degree value (over 0.95 quantile)
+connect_hub_z <- data.frame(connect_matrix_z[hub_name_z,])
+names(connect_hub_z)[names(connect_hub_z) == "connect_matrix_z.hub_name_z..."] <- 'z.score'
+## connect_hub_z =  do.call(rbind.data.frame, connect_hub_z)
+## ordering by z score
+## connect_hub_z <- connect_hub_z[order(connect_hub_z$z.score),] 
+
+## add column with gene names
+connect_hub_z$gene <- factor(rownames(connect_hub_z), levels = rownames(connect_hub_z))
+```
+
+
+```{r}
+## give this data to the lollipop plot
+## Plot
+ggplot(connect_hub_z) +
+  geom_segment( aes(x=gene, xend=gene, y=z.score, yend=z.score), color="grey") +
+  geom_point( aes(x=gene, y=z.score), color=rgb(0.7,0.2,0.1,0.5), size=1 ) +
+  coord_flip()+
+  #theme_ipsum(axis_text_size = 3) +
+  
+  theme(legend.position = "none",
+    axis.text.x = element_text(size =10),
+    axis.text.y = element_text(size = 7)
+  ) +
+  xlab("") +
+  ylab("Degree of Gene") +
+  ggtitle("Degree in z scores") 
+```
+
+
+```{r}
+## Make network graph
+
+library(igraph)
+library(ggraph)
+
+dat <- z_m
+
+## All connections of one hub gene
+hub_con <- dat["ENSG00000138964",] == 1
+
+## Matrix showing all the gene's connections
+hub2 <- dat[hub_con, hub_con]
+
+## Put this into the rigth format for ggraph
+net <- graph_from_adjacency_matrix(hub2 , mode='undirected', diag=F )
+
+V(net)$degree <- degree(net)
+
+ggraph(net, layout = 'igraph', algorithm = "fr") + 
+  geom_edge_link0(edge_width = 1, edge_alpha = 0.7) +  
+  geom_node_point(aes(size = degree), colour = 'forestgreen') + 
+  geom_node_text(aes(label = name, filter = degree > 50), color = 'white', 
+                 size = 3) + 
+  ggforce::theme_no_axes()
+  
+```
+
+```{r}
+# comparison between two hubs
+merge(x = connect_hub_z, y = connect_hub, by = "gene", all.x = TRUE)
+```
+
