@@ -903,6 +903,8 @@ https://stackoverflow.com/questions/28543517/how-can-i-convert-ensembl-id-to-gen
 
 # Part 4. Differential Co-expressed Network
 
+
+To make differential co-expressed network, we use the correlation matrix from part 3. Then, to stabilize the variance of sample correlation coefficients in each condition (condition 1 and condition 2), we apply the Fisher z-transformation:
 ```{r}
 # These codes in the beginnig and other codes I take mostly from the part 3
 load("NumericFPKM.RData")
@@ -940,7 +942,6 @@ DEG_FPKM_split <- lapply(DEG_FPKM_split, function(dat)WGCNA::cor(t(dat)))
 
 ```
 
-
 ```{r}
 ## Make diagonals equal to zero because due to the particularity
 ## of thefisher transformation it is becoming inf
@@ -954,6 +955,7 @@ DEG_FPKM_split_z <- lapply(DEG_FPKM_split, function(dat)(1/2)*log((1+dat)/(1-dat
 
 ```
 
+Then, we find z-scores to evaluate the correlation. 
 ```{r}
 # Compute z-scores to evaluate the correlation
 z_scores <- function(m1, m2){
@@ -964,18 +966,18 @@ z_scores <- function(m1, m2){
 }
 ```
 
+After getting z-scores, we have to create adjacency matrix to check connectivity of the genes. The whole procedure is similar to that in the first part except that thresholding is different since previously the values for tau were from -1 to 1. 
 ```{r}
 # Matrix with z-scores:z_m
 z_m <- z_scores(DEG_FPKM_split_z$normal, DEG_FPKM_split_z$cancer)
 ```
 
-
 ```{r}
 ## apply signum function to get binary adjacency matrix
 ## firstly we the absolute of the matrix to set the threshold more conveniently
 z_m = abs(z_m)
-z_m[z_m < 3] <- 0
-z_m[z_m > 3] <- 1
+z_m[z_m < 7] <- 0
+z_m[z_m > 7] <- 1
 ```
 
 ```{r}
@@ -983,7 +985,7 @@ z_m[z_m > 3] <- 1
 connect_z <- rowSums(z_m)
 ```
 
-
+The graph above shows degree distribution of the genes using the z-score: 
 ```{r}
 ## To check if the network is scale free, make a histogram of the connect vector
 ## histogram for z_scores
@@ -998,8 +1000,6 @@ ggplot(data = dat_norm, aes(connect_z)) +
 ```
 
 ```{r}
-
-
 ## Calculate Average Degree
 sum(connect_z)/ ncol(z_m)
 ```
@@ -1036,7 +1036,7 @@ names(connect_hub_z)[names(connect_hub_z) == "connect_matrix_z.hub_name_z..."] <
 connect_hub_z$gene <- factor(rownames(connect_hub_z), levels = rownames(connect_hub_z))
 ```
 
-
+In the plot below the degrees of top 5 % of genes could be seen:
 ```{r}
 ## give this data to the lollipop plot
 ## Plot
@@ -1083,9 +1083,9 @@ ggraph(net, layout = 'igraph', algorithm = "fr") +
   ggforce::theme_no_axes()
   
 ```
+Finally, we check if there are any intersections with the hub from the previous part. And, as can be seen here, there are very few or no intersections:
 
 ```{r}
 # comparison between two hubs
 merge(x = connect_hub_z, y = connect_hub, by = "gene", all.x = TRUE)
 ```
-
