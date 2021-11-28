@@ -583,6 +583,320 @@ p2 <- p2 + common_scale
   
 ```
 
+```{r}
+#I made the plot for the gene with the highest normal tissue degree -ENSG00000138964 
+#the gene where the cancer tissue has a higher degree than the normal tissue (with highest
+  #cancer tissue degree) - ENSG00000167286
+#Gene were cancer and normal tissue have the same degree - ENSG00000247774
+
+#First gene where the cancer tissue has a higher degree than the normal tissue
+hu <- "ENSG00000167286"
+
+##DEG_FPKM_split
+## Prepare the normal and the cancer dataset for visulaization
+#cancer data set
+dat_c <- DEG_FPKM_split$cancer  #correlation
+dat_abs_c <- DEG_FPKM_split2$cancer #matrix with 0 and 1
+## All connections of one hub gene
+#find out which genes the gub gene is connected to
+hub_con_c <- abs(dat_c[hu,]) > tau & abs(dat_c[hu,]) != 1 ##somehow there is none negative weighted edges
+hub_con_c[hu] <- TRUE
+hub_con_abs_c <- dat_abs_c[hu,] == 1
+hub_con_abs_c[hu] <- TRUE
+###should add also the prime node?????
+## Matrix showing all the gene's connections
+hub2_c <- dat_c[hub_con_c, hub_con_c] #correlations
+hub2_abs_c <- dat_abs_c[hub_con_abs_c, hub_con_abs_c] #1 and one
+## Do the same with the matrix indicating the signs
+dat_sign_c <- DEG_FPKM_split_sign$cancer
+hub2_sign_c <- dat_sign_c[hub_con_abs_c, hub_con_abs_c]
+#set the ones to zero, where no linge should be drawn in the graph
+hub2_sign_c[hub2_abs_c == 0] <- 0
+## Put this into the rigth format for ggraph
+net1 <- graph_from_adjacency_matrix(hub2_abs_c , mode='undirected', diag=F )
+net1_buf <- graph_from_adjacency_matrix(hub2_c , mode='undirected', diag=F, weighted=TRUE )
+set.seed(1)
+V(net1)$degree <- degree(net1)
+E(net1)$weight <- E(net1_buf)$weight
+
+##make a layout for the first graph
+set.seed(1)
+layg1 <- layout.fruchterman.reingold(net1)
+#prepare normal data the same way we prepared cancer data
+dat_n <- DEG_FPKM_split$normal
+dat_abs_n <- DEG_FPKM_split2$normal
+## All connections of one hub gene
+hub_con_n <- abs(dat_n[hu,]) > tau & abs(dat_n[hu,]) != 1
+hub_con_abs_n <- dat_abs_n[hu,] == 1
+
+hub_con_n[hu] <- TRUE
+hub_con_abs_n[hu] <- TRUE
+## Matrix showing all the gene's connections
+hub2_n <- dat_n[hub_con_n, hub_con_n]
+hub2_abs_n <- dat_abs_n[hub_con_abs_n, hub_con_abs_n]
+## Do the same with the matrix indicating the signs
+dat_sign_n <- DEG_FPKM_split_sign$normal
+hub2_sign_n <- dat_sign_n[hub_con_abs_n, hub_con_abs_n]
+#set the ones to zero, where no linge should be drawn in the graph
+hub2_sign_n[hub2_abs_n == 0] <- 0
+## Put this into the rigth format for ggraph
+net2 <- graph_from_adjacency_matrix(hub2_abs_n , mode='undirected', diag=F )
+net2_buf <- graph_from_adjacency_matrix(hub2_n , mode='undirected', diag=F, weighted=TRUE )
+V(net2)$degree <- degree(net2)
+E(net2)$weight <- E(net2_buf)$weight
+set.seed(1)
+layg2 <- layout.fruchterman.reingold(net2)
+# overwrite coords for shared nodes
+layg2[which(V(net2)$name %in% V(net1)$name), ] <- 
+  layg1[which(V(net1)$name %in% V(net2)$name),]
+
+#layg1[which(V(net1)$name %in% V(net2)$name), ] <- 
+#  layg2[which(V(net2)$name %in% V(net1)$name),]
+
+
+## to fix the positions also in the matter of scale
+xlim <- range(c(layg1[,1], layg2[,1]))
+ylim <- range(c(layg1[,2], layg2[,2]))
+
+#cancer
+p1 <- ggraph(net1, layout = layg1) + 
+  geom_edge_link0(edge_width = 0.5, edge_alpha = 0.7, color = "cadetblue4") + 
+  xlim(xlim) + ylim(ylim) + 
+  ggtitle(paste("Hub* of cancer tissue gene ",hu)) + 
+  geom_node_point(aes(size = degree), colour = "lightgreen") +
+   geom_node_point( x = layg1[which(V(net1)$name == hu), 1], 
+             y = layg1[which(V(net1)$name == hu), 2],
+             size = 5, col = "darkgoldenrod1") +
+    geom_node_text(aes(label = name, filter = degree >30), color = 'black', 
+                 size = 2.5) 
+#normal
+p2 <- ggraph(net2, layout = layg2) + 
+  geom_edge_link0(edge_width = 0.5, edge_alpha = 0.7, color = "cadetblue4") + 
+  xlim(xlim) + ylim(ylim) + 
+  ggtitle(paste("Hub* of normal tissue gene ",hu)) +  
+  geom_node_point(aes(size = degree), colour = "lightgreen") +
+     geom_node_point( x = layg2[which(V(net2)$name == hu), 1], 
+             y = layg2[which(V(net2)$name == hu), 2],
+             size = 5, col = "darkgoldenrod1") +
+    geom_node_text(aes(label = name, filter = degree > 20), color = 'black', 
+                 size = 2.5) 
+
+common_scale <- scale_size_area(limits = c(0, 50))
+p1 <- p1 + common_scale
+p2 <- p2 + common_scale
+(p1 | p2) + plot_layout(guides = "collect")
+  
+```
+
+
+
+```{r}
+
+
+##Gene with highest normal degree
+
+hu <- "ENSG00000138964"
+
+##DEG_FPKM_split
+## Prepare the normal and the cancer dataset for visulaization
+#cancer data set
+dat_c <- DEG_FPKM_split$cancer  #correlation
+dat_abs_c <- DEG_FPKM_split2$cancer #matrix with 0 and 1
+## All connections of one hub gene
+#find out which genes the gub gene is connected to
+hub_con_c <- abs(dat_c[hu,]) > tau & abs(dat_c[hu,]) != 1 ##somehow there is none negative weighted edges
+hub_con_c[hu] <- TRUE
+hub_con_abs_c <- dat_abs_c[hu,] == 1
+hub_con_abs_c[hu] <- TRUE
+###should add also the prime node?????
+## Matrix showing all the gene's connections
+hub2_c <- dat_c[hub_con_c, hub_con_c] #correlations
+hub2_abs_c <- dat_abs_c[hub_con_abs_c, hub_con_abs_c] #1 and one
+## Do the same with the matrix indicating the signs
+dat_sign_c <- DEG_FPKM_split_sign$cancer
+hub2_sign_c <- dat_sign_c[hub_con_abs_c, hub_con_abs_c]
+#set the ones to zero, where no linge should be drawn in the graph
+hub2_sign_c[hub2_abs_c == 0] <- 0
+## Put this into the rigth format for ggraph
+net1 <- graph_from_adjacency_matrix(hub2_abs_c , mode='undirected', diag=F )
+net1_buf <- graph_from_adjacency_matrix(hub2_c , mode='undirected', diag=F, weighted=TRUE )
+set.seed(1)
+V(net1)$degree <- degree(net1)
+E(net1)$weight <- E(net1_buf)$weight
+
+##make a layout for the first graph
+set.seed(1)
+layg1 <- layout.fruchterman.reingold(net1)
+#prepare normal data the same way we prepared cancer data
+dat_n <- DEG_FPKM_split$normal
+dat_abs_n <- DEG_FPKM_split2$normal
+## All connections of one hub gene
+hub_con_n <- abs(dat_n[hu,]) > tau & abs(dat_n[hu,]) != 1
+hub_con_abs_n <- dat_abs_n[hu,] == 1
+
+hub_con_n[hu] <- TRUE
+hub_con_abs_n[hu] <- TRUE
+## Matrix showing all the gene's connections
+hub2_n <- dat_n[hub_con_n, hub_con_n]
+hub2_abs_n <- dat_abs_n[hub_con_abs_n, hub_con_abs_n]
+## Do the same with the matrix indicating the signs
+dat_sign_n <- DEG_FPKM_split_sign$normal
+hub2_sign_n <- dat_sign_n[hub_con_abs_n, hub_con_abs_n]
+#set the ones to zero, where no linge should be drawn in the graph
+hub2_sign_n[hub2_abs_n == 0] <- 0
+## Put this into the rigth format for ggraph
+net2 <- graph_from_adjacency_matrix(hub2_abs_n , mode='undirected', diag=F )
+net2_buf <- graph_from_adjacency_matrix(hub2_n , mode='undirected', diag=F, weighted=TRUE )
+V(net2)$degree <- degree(net2)
+E(net2)$weight <- E(net2_buf)$weight
+set.seed(1)
+layg2 <- layout.fruchterman.reingold(net2)
+# overwrite coords for shared nodes
+#layg2[which(V(net2)$name %in% V(net1)$name), ] <- 
+#  layg1[which(V(net1)$name %in% V(net2)$name),]
+
+layg1[which(V(net1)$name %in% V(net2)$name), ] <- 
+  layg2[which(V(net2)$name %in% V(net1)$name),]
+
+
+## to fix the positions also in the matter of scale
+xlim <- range(c(layg1[,1], layg2[,1]))
+ylim <- range(c(layg1[,2], layg2[,2]))
+
+#cancer
+p1 <- ggraph(net1, layout = layg1) + 
+  geom_edge_link0(edge_width = 0.5, edge_alpha = 0.7, color = "cadetblue4") + 
+  xlim(xlim) + ylim(ylim) + 
+  ggtitle(paste("Hub* of cancer tissue gene ",hu)) + 
+  geom_node_point(aes(size = degree), colour = "lightgreen") +
+   geom_node_point( x = layg1[which(V(net1)$name == hu), 1], 
+             y = layg1[which(V(net1)$name == hu), 2],
+             size = 5, col = "darkgoldenrod1") +
+    geom_node_text(aes(label = name, filter = degree > 5), color = 'black', 
+                 size = 2.5) 
+#normal
+p2 <- ggraph(net2, layout = layg2) + 
+  geom_edge_link0(edge_width = 0.5, edge_alpha = 0.7, color = "cadetblue4") + 
+  xlim(xlim) + ylim(ylim) + 
+  ggtitle(paste("Hub* of normal tissue gene ",hu)) +  
+  geom_node_point(aes(size = degree), colour = "lightgreen") +
+     geom_node_point( x = layg2[which(V(net2)$name == hu), 1], 
+             y = layg2[which(V(net2)$name == hu), 2],
+             size = 5, col = "darkgoldenrod1") +
+    geom_node_text(aes(label = name, filter = degree > 35), color = 'black', 
+                 size = 2.5) 
+
+common_scale <- scale_size_area(limits = c(0, 50))
+p1 <- p1 + common_scale
+p2 <- p2 + common_scale
+(p1 | p2) + plot_layout(guides = "collect")
+  
+  
+
+#####
+
+
+###Gene were cancer and normal tissue have same degree
+
+hu <- "ENSG00000137078"
+
+##DEG_FPKM_split
+## Prepare the normal and the cancer dataset for visulaization
+#cancer data set
+dat_c <- DEG_FPKM_split$cancer  #correlation
+dat_abs_c <- DEG_FPKM_split2$cancer #matrix with 0 and 1
+## All connections of one hub gene
+#find out which genes the gub gene is connected to
+hub_con_c <- abs(dat_c[hu,]) > tau & abs(dat_c[hu,]) != 1 ##somehow there is none negative weighted edges
+hub_con_c[hu] <- TRUE
+hub_con_abs_c <- dat_abs_c[hu,] == 1
+hub_con_abs_c[hu] <- TRUE
+###should add also the prime node?????
+## Matrix showing all the gene's connections
+hub2_c <- dat_c[hub_con_c, hub_con_c] #correlations
+hub2_abs_c <- dat_abs_c[hub_con_abs_c, hub_con_abs_c] #1 and one
+## Do the same with the matrix indicating the signs
+dat_sign_c <- DEG_FPKM_split_sign$cancer
+hub2_sign_c <- dat_sign_c[hub_con_abs_c, hub_con_abs_c]
+#set the ones to zero, where no linge should be drawn in the graph
+hub2_sign_c[hub2_abs_c == 0] <- 0
+## Put this into the rigth format for ggraph
+net1 <- graph_from_adjacency_matrix(hub2_abs_c , mode='undirected', diag=F )
+net1_buf <- graph_from_adjacency_matrix(hub2_c , mode='undirected', diag=F, weighted=TRUE )
+set.seed(1)
+V(net1)$degree <- degree(net1)
+E(net1)$weight <- E(net1_buf)$weight
+
+##make a layout for the first graph
+set.seed(1)
+layg1 <- layout.fruchterman.reingold(net1)
+#prepare normal data the same way we prepared cancer data
+dat_n <- DEG_FPKM_split$normal
+dat_abs_n <- DEG_FPKM_split2$normal
+## All connections of one hub gene
+hub_con_n <- abs(dat_n[hu,]) > tau & abs(dat_n[hu,]) != 1
+hub_con_abs_n <- dat_abs_n[hu,] == 1
+
+hub_con_n[hu] <- TRUE
+hub_con_abs_n[hu] <- TRUE
+## Matrix showing all the gene's connections
+hub2_n <- dat_n[hub_con_n, hub_con_n]
+hub2_abs_n <- dat_abs_n[hub_con_abs_n, hub_con_abs_n]
+## Do the same with the matrix indicating the signs
+dat_sign_n <- DEG_FPKM_split_sign$normal
+hub2_sign_n <- dat_sign_n[hub_con_abs_n, hub_con_abs_n]
+#set the ones to zero, where no linge should be drawn in the graph
+hub2_sign_n[hub2_abs_n == 0] <- 0
+## Put this into the rigth format for ggraph
+net2 <- graph_from_adjacency_matrix(hub2_abs_n , mode='undirected', diag=F )
+net2_buf <- graph_from_adjacency_matrix(hub2_n , mode='undirected', diag=F, weighted=TRUE )
+V(net2)$degree <- degree(net2)
+E(net2)$weight <- E(net2_buf)$weight
+set.seed(1)
+layg2 <- layout.fruchterman.reingold(net2)
+# overwrite coords for shared nodes
+#layg2[which(V(net2)$name %in% V(net1)$name), ] <- 
+#  layg1[which(V(net1)$name %in% V(net2)$name),]
+
+layg1[which(V(net1)$name %in% V(net2)$name), ] <- 
+  layg2[which(V(net2)$name %in% V(net1)$name),]
+
+
+## to fix the positions also in the matter of scale
+xlim <- range(c(layg1[,1], layg2[,1]))
+ylim <- range(c(layg1[,2], layg2[,2]))
+
+#cancer
+p1 <- ggraph(net1, layout = layg1) + 
+  geom_edge_link0(edge_width = 0.5, edge_alpha = 0.7, color = "cadetblue4") + 
+  xlim(xlim) + ylim(ylim) + 
+  ggtitle(paste("Hub* of cancer tissue gene ",hu)) + 
+  geom_node_point(aes(size = degree), colour = "lightgreen") +
+   geom_node_point( x = layg1[which(V(net1)$name == hu), 1], 
+             y = layg1[which(V(net1)$name == hu), 2],
+             size = 5, col = "darkgoldenrod1") +
+    geom_node_text(aes(label = name, filter = degree > 25), color = 'black', 
+                 size = 2.5) 
+#normal
+p2 <- ggraph(net2, layout = layg2) + 
+  geom_edge_link0(edge_width = 0.5, edge_alpha = 0.7, color = "cadetblue4") + 
+  xlim(xlim) + ylim(ylim) + 
+  ggtitle(paste("Hub* of normal tissue gene ",hu)) +  
+  geom_node_point(aes(size = degree), colour = "lightgreen") +
+     geom_node_point( x = layg2[which(V(net2)$name == hu), 1], 
+             y = layg2[which(V(net2)$name == hu), 2],
+             size = 5, col = "darkgoldenrod1") +
+    geom_node_text(aes(label = name, filter = degree > 25), color = 'black', 
+                 size = 2.5) 
+
+common_scale <- scale_size_area(limits = c(0, 50))
+p1 <- p1 + common_scale
+p2 <- p2 + common_scale
+(p1 | p2) + plot_layout(guides = "collect")
+
+
+```
+
 Here is a website I found, where they describe how to convert the Gene_IDs we have into the gene's names. Maybe this is helpful for the last part of the task:
 https://stackoverflow.com/questions/28543517/how-can-i-convert-ensembl-id-to-gene-symbol-in-r
 
