@@ -998,13 +998,13 @@ ggplot(data = dat_norm, aes(connect_z)) +
   xlab("degree") 
 ## looks like degree distribution follows normal distribution
 ```
-
+ It could be seen that the network is scale free and follows power law, when the threshold is 7. We have also tried it with the threshold of 3 and the degree distribution followed more a normal distribution. Therefore, we stopped at 7. 
 ```{r}
 ## Calculate Average Degree
 sum(connect_z)/ ncol(z_m)
 ```
 
-
+Now, it is time to find the hubs using the z-values. 
 ```{r}
 ## calculate the 0.95 quantile of the empirical distribution of degrees over 
 ## nodes to get the hub genes
@@ -1012,16 +1012,11 @@ sum(connect_z)/ ncol(z_m)
 ## Get the names of hub genes from both datasets
 
 hub_name_z <- names(connect_z)[connect_z > quantile(connect_z, 0.95)]
-```
 
-```{r}
 ## merge to vector and remove doubled entriess
 hub_name_z <- unique(as.character(unlist(hub_name_z)))
-```
 
-```{r}
 ## extract degrees of these genes
-
 ## turn list containing the degrees into a data frame
 connect_matrix_z <- cbind(connect_z)
 
@@ -1055,17 +1050,18 @@ ggplot(connect_hub_z) +
   ggtitle("Degree in z scores") 
 ```
 
-
+Here, we do the visualization of the network and can clearly see all the connections of the mostly connected node. 
 ```{r}
 ## Make network graph
 
 library(igraph)
 library(ggraph)
 
+
 dat <- z_m
 
 ## All connections of one hub gene
-hub_con <- dat["ENSG00000138964",] == 1
+hub_con <- dat["ENSG00000015413",] == 1
 
 ## Matrix showing all the gene's connections
 hub2 <- dat[hub_con, hub_con]
@@ -1082,10 +1078,16 @@ ggraph(net, layout = 'igraph', algorithm = "fr") +
                  size = 3) + 
   ggforce::theme_no_axes()
   
-```
-Finally, we check if there are any intersections with the hub from the previous part. And, as can be seen here, there are very few or no intersections:
 
+  
+```
+Finally, we check if there are any intersections with the hub from the previous part. And, as can be seen here, there are no intersections.
 ```{r}
 # comparison between two hubs
 merge(x = connect_hub_z, y = connect_hub, by = "gene", all.x = TRUE)
+```
+
+```{r}
+both <- intersect(hub_name,hub_name_z)
+connect_hub[both,]
 ```
